@@ -1,156 +1,230 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { generateImage, editImage } from '../services/geminiService';
-import { UploadIcon, SparklesIcon, MagicWandIcon } from './IconComponents';
+import React, { useState, useRef, FormEvent, useEffect } from 'react';
+import { ImageStudioMessage } from '../types';
+import { generateImage, editImage, isApiKeyConfigured } from '../services/geminiService';
+import { 
+  UploadIcon, 
+  MagicWandIcon, 
+  UserIcon, 
+  BotIcon, 
+  PaperclipIcon, 
+  DownloadIcon, 
+  SparklesIcon 
+} from './IconComponents';
 import { LoadingSpinner } from './LoadingSpinner';
 
 export const ImageStudio: React.FC = () => {
+  const [messages, setMessages] = useState<ImageStudioMessage[]>([]);
   const [prompt, setPrompt] = useState<string>('');
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isApiReady, setIsApiReady] = useState<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isApiKeyConfigured()) {
+      setIsApiReady(false);
+      setMessages([{
+        id: 'api-error',
+        role: 'model',
+        text: "Configuration needed. Please set the API_KEY environment variable to use the Image Studio."
+      }]);
+      return;
+    }
+
+    if (messages.length === 0) {
+      setMessages([
+        {
+          id: 'initial',
+          role: 'model',
+          text: "Welcome to the Image Studio! Describe the image you want to create, or upload an image to edit.",
+        }
+      ]);
+    }
+  }, []);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(scrollToBottom, [messages]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result as string);
-        setResultImageUrl(null); // Clear previous result when new image is uploaded
-      };
-      reader.readAsDataURL(file);
+    if (event.target.files && event.target.files[0]) {
+      setImageFile(event.target.files[0]);
     }
   };
 
-  const handleAction = useCallback(async (action: 'generate' | 'edit') => {
-    if (!prompt.trim()) {
-      setError('Please enter a prompt.');
-      return;
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
-    if (action === 'edit' && !imageFile) {
-      setError('Please upload an image to edit.');
-      return;
-    }
+  };
 
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || isLoading || !isApiReady) return;
+
+    const userMessage: ImageStudioMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      text: prompt,
+      originalImageUrl: imageFile ? URL.createObjectURL(imageFile) : undefined,
+    };
+
+    setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
     setError(null);
-    setResultImageUrl(null);
+    const currentPrompt = prompt;
+    const currentImageFile = imageFile;
+    setPrompt('');
+    setImageFile(null);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
 
     try {
-      let newImageUrl: string;
-      if (action === 'generate') {
-        newImageUrl = await generateImage(prompt);
+      let imageUrl: string;
+      if (currentImageFile) {
+        imageUrl = await editImage(currentPrompt, currentImageFile);
       } else {
-        newImageUrl = await editImage(prompt, imageFile!);
+        imageUrl = await generateImage(currentPrompt);
       }
-      setResultImageUrl(newImageUrl);
+
+      const modelMessage: ImageStudioMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        imageUrl: imageUrl,
+        text: `Here's an image based on your prompt: "${currentPrompt}"`,
+        originalImageUrl: currentImageFile ? URL.createObjectURL(currentImageFile) : undefined,
+      };
+      setMessages(prev => [...prev, modelMessage]);
+
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(`Failed to generate image: ${errorMessage}`);
+      const errorModelMessage: ImageStudioMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: `Sorry, I couldn't generate the image. Error: ${errorMessage}`,
+      };
+      setMessages(prev => [...prev, errorModelMessage]);
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, imageFile]);
+  };
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-8 h-full">
-      {/* Left Panel - Controls & Input */}
-      <div className="w-full lg:w-1/3 bg-black/20 backdrop-blur-md border border-white/10 p-6 rounded-2xl shadow-2xl flex flex-col">
-        <h2 className="text-2xl font-bold mb-4 text-purple-400">Image Controls</h2>
-        
-        {/* Prompt Input */}
-        <div className="mb-6">
-          <label htmlFor="prompt" className="block text-sm font-medium text-gray-300 mb-2">
-            Your Creative Prompt
-          </label>
-          <textarea
-            id="prompt"
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g., A cat wearing a spacesuit on Mars, cinematic lighting"
-            className="w-full bg-gray-900/50 border border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition"
-          />
-        </div>
+  const downloadImage = (url: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-        {/* File Upload */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Upload Image (for editing)
-          </label>
-          <div 
-            className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-purple-500 hover:bg-purple-500/10 transition-all duration-300"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <UploadIcon className="mx-auto h-12 w-12 text-gray-500" />
-            <p className="mt-2 text-sm text-gray-400">
-              {imageFile ? imageFile.name : 'Click to upload or drag and drop'}
-            </p>
-          </div>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
-        </div>
-        
-        {/* Action Buttons */}
-        <div className="space-y-4 mt-auto">
-          <button
-            onClick={() => handleAction('generate')}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/50 transform hover:-translate-y-1 disabled:bg-gray-500 disabled:shadow-none disabled:transform-none"
-          >
-            <SparklesIcon className="w-5 h-5" />
-            Generate
-          </button>
-          <button
-            onClick={() => handleAction('edit')}
-            disabled={isLoading || !imageFile}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-500 to-orange-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-pink-500/50 transform hover:-translate-y-1 disabled:bg-gray-500 disabled:shadow-none disabled:transform-none disabled:cursor-not-allowed"
-          >
-            <MagicWandIcon className="w-5 h-5" />
-            Edit
-          </button>
-        </div>
-        {error && <p className="text-red-400 mt-4 text-sm">{error}</p>}
-      </div>
-
-      {/* Right Panel - Image Display */}
-      <div className="w-full lg:w-2/3 bg-black/20 backdrop-blur-md border border-white/10 p-6 rounded-2xl shadow-2xl flex items-center justify-center relative min-h-[400px] lg:min-h-0">
-        {isLoading && (
-          <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-10 rounded-2xl">
-            <LoadingSpinner />
-            <p className="mt-4 text-purple-300 text-lg font-semibold">Gemini is creating magic...</p>
+  const MessageBubble: React.FC<{ message: ImageStudioMessage }> = ({ message }) => {
+    const isUser = message.role === 'user';
+    
+    return (
+      <div className={`flex items-start gap-3 my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        {!isUser && (
+          <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+            <BotIcon className="w-6 h-6 text-white" />
           </div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full h-full">
-          <div className="flex flex-col items-center justify-center bg-black/30 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-2 text-gray-400">Original</h3>
-            <div className="w-full h-full flex items-center justify-center aspect-square">
-              {imageUrl ? (
-                <img src={imageUrl} alt="Uploaded" className="max-w-full max-h-full object-contain rounded-md" />
-              ) : (
-                <div className="text-gray-500 text-center">Upload an image to see it here</div>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col items-center justify-center bg-black/30 rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-2 text-gray-400">Result</h3>
-            <div className="w-full h-full flex items-center justify-center aspect-square">
-              {resultImageUrl ? (
-                <img src={resultImageUrl} alt="Generated" className="max-w-full max-h-full object-contain rounded-md" />
-              ) : (
-                <div className="text-gray-500 text-center">Your generated or edited image will appear here</div>
-              )}
-            </div>
-          </div>
+        <div className={`max-w-xl p-4 rounded-2xl shadow-md ${ isUser ? 'bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white rounded-br-lg' : 'bg-gray-700 text-white rounded-bl-lg' }`}>
+            {message.text && <p className="mb-2 text-white whitespace-pre-wrap break-words">{message.text}</p>}
+            {message.originalImageUrl && !message.imageUrl && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-300 mb-1">Editing this image:</p>
+                <img src={message.originalImageUrl} alt="user uploaded content" className="rounded-lg w-full max-w-xs h-auto max-h-[50vh]" />
+              </div>
+            )}
+            {message.imageUrl && (
+              <div className="relative group">
+                <img src={message.imageUrl} alt={message.text || 'generated image'} className="rounded-lg w-full max-w-sm h-auto max-h-[70vh]" />
+                 <button onClick={() => downloadImage(message.imageUrl!, `${message.text?.replace(/\s/g, '_') || 'generated_image'}.png`)} className="absolute bottom-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                    <DownloadIcon className="w-5 h-5" />
+                 </button>
+              </div>
+            )}
         </div>
+        {isUser && (
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg">
+            <UserIcon className="w-6 h-6 text-white" />
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  return (
+    <div className="flex flex-col flex-grow bg-black/20 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="flex-grow p-6 overflow-y-auto overflow-x-hidden hide-scrollbar">
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id} message={msg} />
+        ))}
+        {isLoading && (
+            <div className="flex items-start gap-3 my-4 justify-start">
+                 <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
+                    <BotIcon className="w-6 h-6 text-white" />
+                 </div>
+                <div className="bg-gray-700 rounded-2xl rounded-bl-lg p-4 flex items-center space-x-2">
+                   <p className="mr-2 text-sm text-gray-300">Generating...</p>
+                   <LoadingSpinner />
+                </div>
+            </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="p-6 border-t border-white/10">
+        {error && <p className="text-red-400 text-sm mb-2 text-center">{error}</p>}
+        {imageFile && (
+          <div className="mb-2 flex items-center gap-2 bg-gray-900/50 p-2 rounded-lg">
+            <img src={URL.createObjectURL(imageFile)} alt="preview" className="w-12 h-12 rounded object-cover" />
+            <span className="text-sm text-gray-300 truncate">{imageFile.name}</span>
+            <button onClick={handleRemoveImage} className="ml-auto text-gray-400 hover:text-white p-1 text-2xl leading-none">&times;</button>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="flex items-center gap-4">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            ref={fileInputRef}
+            className="hidden"
+            disabled={!isApiReady}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 bg-gray-900/50 border border-white/20 rounded-lg text-white hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title={imageFile ? "Change image" : "Upload image to edit"}
+            disabled={!isApiReady}
+          >
+            {imageFile ? <PaperclipIcon className="w-6 h-6 text-purple-400" /> : <UploadIcon className="w-6 h-6" />}
+          </button>
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={!isApiReady ? "API Key not configured" : (imageFile ? "Describe how to edit the image..." : "Describe the image to generate...")}
+            className="flex-grow bg-gray-900/50 border border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition disabled:opacity-50"
+            disabled={isLoading || !isApiReady}
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !prompt.trim() || !isApiReady}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold p-3 rounded-lg transition-all duration-300 transform hover:scale-110 disabled:bg-gray-500 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+          >
+            {imageFile ? <MagicWandIcon className="w-6 h-6" /> : <SparklesIcon className="w-6 h-6" />}
+            <span className="hidden sm:inline">{imageFile ? "Edit" : "Generate"}</span>
+          </button>
+        </form>
       </div>
     </div>
   );

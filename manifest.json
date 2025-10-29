@@ -1,0 +1,21 @@
+{
+  "short_name": "Image Gen",
+  "name": "Image Generator",
+  "description": "An application that leverages the Gemini API to provide a chatbot for answering questions and an image studio for generating and editing images with text prompts.",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/vite.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1f2937",
+  "background_color": "#111827"
+}

@@ -1,4 +1,5 @@
 import { GoogleGenAI, Chat, Modality, GenerateContentResponse } from "@google/genai";
+import { parseApiError, createApiError, ErrorType } from "./errorHandler";
 
 const API_KEY = process.env.API_KEY;
 
@@ -17,16 +18,38 @@ export const isApiKeyConfigured = (): boolean => !!ai;
  */
 const ensureAi = () => {
   if (!ai) {
-    throw new Error("Gemini API key not configured. Please set the API_KEY environment variable.");
+    throw createApiError(
+      ErrorType.API_NOT_CONFIGURED,
+      "Gemini API key not configured. Please set the API_KEY environment variable.",
+      "API key is not configured. Please set the API_KEY in your .env file to use this feature."
+    );
   }
   return ai;
 };
 
+/**
+ * Wraps API calls with error handling to provide user-friendly error messages
+ */
+const handleApiError = (error: unknown): never => {
+  // If it's already a parsed error, re-throw it
+  if (error && typeof error === 'object' && 'type' in error && 'userFriendlyMessage' in error) {
+    throw error;
+  }
+
+  // Parse and throw the formatted error
+  const apiError = parseApiError(error);
+  throw createApiError(apiError.type, apiError.message, apiError.userFriendlyMessage);
+};
+
 export const createChat = (): Chat => {
-  const aiInstance = ensureAi();
-  return aiInstance.chats.create({
-    model: 'gemini-2.5-flash',
-  });
+  try {
+    const aiInstance = ensureAi();
+    return aiInstance.chats.create({
+      model: 'gemini-2.5-flash',
+    });
+  } catch (error) {
+    handleApiError(error);
+  }
 };
 
 export const fileToGenerativePart = async (file: File) => {
@@ -76,34 +99,42 @@ const processImageResponse = (response: GenerateContentResponse): string => {
 };
 
 export const generateImage = async (prompt: string): Promise<string> => {
-  const aiInstance = ensureAi();
-  const response = await aiInstance.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: prompt,
-    config: {
+  try {
+    const aiInstance = ensureAi();
+    const response = await aiInstance.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: prompt,
+      config: {
         responseModalities: [Modality.IMAGE],
-    },
-  });
+      },
+    });
 
-  return processImageResponse(response);
+    return processImageResponse(response);
+  } catch (error) {
+    handleApiError(error);
+  }
 };
 
 export const editImage = async (prompt: string, image: File): Promise<string> => {
-  const aiInstance = ensureAi();
-  const imagePart = await fileToGenerativePart(image);
+  try {
+    const aiInstance = ensureAi();
+    const imagePart = await fileToGenerativePart(image);
 
-  const response = await aiInstance.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: {
-      parts: [
-        imagePart,
-        { text: prompt },
-      ],
-    },
-    config: {
+    const response = await aiInstance.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [
+          imagePart,
+          { text: prompt },
+        ],
+      },
+      config: {
         responseModalities: [Modality.IMAGE],
-    },
-  });
+      },
+    });
 
-  return processImageResponse(response);
+    return processImageResponse(response);
+  } catch (error) {
+    handleApiError(error);
+  }
 };

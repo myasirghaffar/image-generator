@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import type { Chat } from '@google/genai';
 import type { ChatMessage } from '../types';
 import { createChat, isApiKeyConfigured } from '../services/geminiService';
+import { getUserFriendlyErrorMessage } from '../services/errorHandler';
 import { SendIcon, UserIcon, BotIcon } from './IconComponents';
 
 export const Chatbot: React.FC = () => {
@@ -21,10 +22,18 @@ export const Chatbot: React.FC = () => {
       return;
     }
 
-    setChat(createChat());
-    setMessages([
+    try {
+      setChat(createChat());
+      setMessages([
         { role: 'model', text: "Hello! I'm Gemini. How can I help you today?" }
-    ]);
+      ]);
+    } catch (error) {
+      setIsApiReady(false);
+      const friendlyErrorMessage = getUserFriendlyErrorMessage(error);
+      setMessages([
+        { role: 'model', text: `❌ ${friendlyErrorMessage}` }
+      ]);
+    }
   }, []);
 
   const scrollToBottom = () => {
@@ -37,18 +46,23 @@ export const Chatbot: React.FC = () => {
     e.preventDefault();
     if (!currentMessage.trim() || isLoading || !chat || !isApiReady) return;
 
-    const userMessage: ChatMessage = { role: 'user', text: currentMessage };
+    const userMessageText = currentMessage;
+    const userMessage: ChatMessage = { role: 'user', text: userMessageText };
     setMessages((prev) => [...prev, userMessage]);
     setCurrentMessage('');
     setIsLoading(true);
 
     try {
-      const response = await chat.sendMessage({ message: currentMessage });
+      const response = await chat.sendMessage({ message: userMessageText });
       const modelMessage: ChatMessage = { role: 'model', text: response.text };
       setMessages((prev) => [...prev, modelMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage: ChatMessage = { role: 'model', text: 'Sorry, I encountered an error. Please try again.' };
+      const friendlyErrorMessage = getUserFriendlyErrorMessage(error);
+      const errorMessage: ChatMessage = { 
+        role: 'model', 
+        text: `❌ ${friendlyErrorMessage}` 
+      };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);

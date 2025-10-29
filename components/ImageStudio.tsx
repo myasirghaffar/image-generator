@@ -1,6 +1,7 @@
 import React, { useState, useRef, FormEvent, useEffect } from 'react';
 import { ImageStudioMessage } from '../types';
 import { generateImage, editImage, isApiKeyConfigured } from '../services/geminiService';
+import { getUserFriendlyErrorMessage } from '../services/errorHandler';
 import { 
   UploadIcon, 
   MagicWandIcon, 
@@ -104,12 +105,12 @@ export const ImageStudio: React.FC = () => {
 
     } catch (err) {
       console.error(err);
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(`Failed to generate image: ${errorMessage}`);
+      const friendlyErrorMessage = getUserFriendlyErrorMessage(err);
+      setError(friendlyErrorMessage);
       const errorModelMessage: ImageStudioMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: `Sorry, I couldn't generate the image. Error: ${errorMessage}`,
+        text: `❌ ${friendlyErrorMessage}`,
       };
       setMessages(prev => [...prev, errorModelMessage]);
     } finally {
@@ -182,12 +183,15 @@ export const ImageStudio: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
       <div className="p-6 border-t border-white/10">
-        {error && <p className="text-red-400 text-sm mb-2 text-center">{error}</p>}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 mb-2">
+            <p className="text-red-300 text-sm text-center font-medium">{error}</p>
+          </div>
+        )}
         {imageFile && (
-          <div className="mb-2 flex items-center gap-2 bg-gray-900/50 p-2 rounded-lg">
-            <img src={URL.createObjectURL(imageFile)} alt="preview" className="w-12 h-12 rounded object-cover" />
-            <span className="text-sm text-gray-300 truncate">{imageFile.name}</span>
-            <button onClick={handleRemoveImage} className="ml-auto text-gray-400 hover:text-white p-1 text-2xl leading-none">&times;</button>
+          <div className="mb-2 flex items-center justify-center gap-2 bg-gray-900/50 p-2 rounded-lg relative">
+            <img src={URL.createObjectURL(imageFile)} alt="preview" className="w-16 h-16 rounded object-cover" />
+            <button onClick={handleRemoveImage} className="absolute top-1 right-1 text-gray-400 hover:text-white p-1 text-2xl leading-none bg-black/50 rounded-full w-6 h-6 flex items-center justify-center">&times;</button>
           </div>
         )}
         <form onSubmit={handleSubmit} className="flex items-center gap-4">

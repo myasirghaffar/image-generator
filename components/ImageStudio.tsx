@@ -186,7 +186,6 @@ export const ImageStudio: React.FC = () => {
         {imageFile && (
           <div className="mb-2 flex items-center gap-2 bg-gray-900/50 p-2 rounded-lg">
             <img src={URL.createObjectURL(imageFile)} alt="preview" className="w-12 h-12 rounded object-cover" />
-            <span className="text-sm text-gray-300 truncate">{imageFile.name}</span>
             <button onClick={handleRemoveImage} className="ml-auto text-gray-400 hover:text-white p-1 text-2xl leading-none">&times;</button>
           </div>
         )}

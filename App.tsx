@@ -37,7 +37,7 @@ const App: React.FC = () => {
       <header className="bg-black/30 backdrop-blur-sm shadow-lg sticky top-0 z-10 border-b border-white/10">
         <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center">
           <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500 mb-4 sm:mb-0">
-            Gemini Creative Suite
+            Image Generator
           </h1>
           <nav className="w-full sm:w-auto grid grid-cols-2 gap-2">
             <TabButton tabName="studio" label="Image Studio" icon={<ImageIcon className="w-5 h-5" />} />
@@ -49,7 +49,7 @@ const App: React.FC = () => {
         {renderTabContent()}
       </main>
        <footer className="bg-transparent text-center p-4 text-sm text-gray-400">
-            <p>Powered by Google Gemini</p>
+            <p>Powered by Yasir Ghaffar</p>
         </footer>
     </div>
   );

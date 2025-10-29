@@ -213,7 +213,7 @@ export const ImageStudio: React.FC = () => {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={!isApiReady ? "API Key not configured" : (imageFile ? "Describe how to edit the image..." : "Describe the image to generate...")}
-            className="flex-grow bg-gray-900/50 border border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition disabled:opacity-50"
+            className="flex-grow min-w-0 bg-gray-900/50 border border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition disabled:opacity-50"
             disabled={isLoading || !isApiReady}
           />
           <button

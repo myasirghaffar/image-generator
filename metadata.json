@@ -1,0 +1,5 @@
+{
+  "name": "image generator ",
+  "description": "An application that leverages the Gemini API to provide a chatbot for answering questions and an image studio for generating and editing images with text prompts.",
+  "requestFramePermissions": []
+}
